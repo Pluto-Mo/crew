@@ -1,0 +1,11 @@
+# local-only: reverse-engineering notes, never published
+SHENYU-ARCHITECTURE.md
+
+# build and test artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.tgz
+.DS_Store
+node_modules/
+.demo/

@@ -1,0 +1,188 @@
+# @starixs/crew
+
+Division of labour for heavy work, as an agent skill. Four roles — **brain, hand,
+review, verify** — plus the machinery to make "done" mean something.
+
+The package is `@starixs/crew`: starixs is the company, crew is the thing you
+hire — four jobs on one boat. The command it installs is `starixs`.
+
+Built for teams: one person maintains it, everyone installs it, nobody has to
+trust a sealed binary.
+
+---
+
+## Architecture: three layers
+
+| Layer | Runs when | Job |
+|---|---|---|
+| **Gate** `scripts/gate.py` | Every user message, via a host hook | Puts the standing rule in front of the agent in full; adds two undo rules when the message mentions an irreversible action; records one line per message (time, host, session, which rules, length, directory — never content) |
+| **Skill** `SKILL.md` | Read once per session | The four roles, the brakes, the reviewer table |
+| **Split** `scripts/starixs.py` | Heavy work only | Resolves the brain/hand/review/verify split for this host, or replays the user's confirmed one |
+
+Why a gate at all: without it the rules only appear when the agent decides to go
+look them up — and an agent is least likely to look things up precisely when it
+is rushing. Why the gate stays dumb: it only decides what is visible in the
+literal text (first message? short follow-up? mentions something irreversible?).
+"Is this a correction, is this heavy" needs intent, so that stays with the agent.
+
+Three properties the gate holds no matter what:
+
+- **Exit code is always 0.** A gate that can block a user's message is worse than no gate.
+- **It never records message content.** Length and rule names only.
+- **It reads only the user's own words.** Pasted material (`<pasted_content>`, code blocks, quoted lines) and host notifications do not trigger the undo rules.
+
+## What it does
+
+When work is heavy (multi-step, several modules, or ending in something hard to
+undo), the agent runs `plan`. It gets back:
+
+- the four roles and what each must not do
+- an instruction to discover, read-only, what *this* host can actually run
+- the brake rules: what counts as small, when to consult the brain, how many review rounds
+- a reviewer table keyed to what a miss would cost
+
+**No model names, no effort-level names, no host capability list** is written
+anywhere in this package. The agent discovers what exists at run time and
+decides. A model refresh never needs a code change. This is the single most
+important design constraint, and a test enforces it.
+
+## Why four roles
+
+One context being author, reviewer and judge at once is how "done" becomes a
+claim instead of a fact. Splitting the roles is cheap; conflating them is
+expensive in exactly the way you notice too late.
+
+| Role | Does | Must not |
+|---|---|---|
+| Brain | Decides the approach and hard calls | Be consulted for a handful of steps |
+| Hand | Does the work | Judge its own result |
+| Review | Reads the result against the goal, fresh read-only context | Have done the work; be weaker than the hand |
+| Verify | Runs something that can fail | Be replaced by a model's opinion |
+
+## Install
+
+Two routes. Pick whichever fits how your team works.
+
+### Route A — the skills CLI (same as okkhtml)
+
+```bash
+npx -y skills add Pluto-Mo/crew --skill crew -g -y
+```
+
+That drops the thin `SKILL.md` into `~/.agents/skills/crew/`, which is what makes
+the agent notice the skill. The rules themselves are not copied — they come from
+the CLI on demand.
+
+### Route B — the npm package, with the gate
+
+```bash
+npx @starixs/crew install                       # dry run: every path it would write
+npx @starixs/crew install --apply --with-gate   # skill + per-message hook
+npx @starixs/crew check                         # is the hook wired?
+npx @starixs/crew uninstall
+```
+
+Route B also installs the hook, so the rules arrive with every task message
+instead of only when the agent thinks to look them up.
+
+**There is no postinstall hook.** `npm install` writes nothing outside
+`node_modules`. A package that silently rewires your agent on install is exactly
+what the gate's own audit rules would flag.
+
+## Why two routes
+
+`skills add` copies a folder and stops there — good enough for a skill whose
+whole job is "run this command when asked". The division-of-labour rules have a
+second requirement: they must be in front of the agent *on every message*,
+including the messages where it is rushing and would not think to look anything
+up. That needs a hook, and a hook needs a stable file on disk.
+
+So the split is:
+
+| Layer | How it ships |
+|---|---|
+| Skill text | `skills/crew/SKILL.md` — thin, installed by either route |
+| Rules and logic | `scripts/` — run from the package, or from the installed copy |
+| Gate | `install --apply --with-gate` copies a plain-text `gate.py` and the rule texts to `~/.local/share/starixs/` and wires the host hook |
+
+The hook never runs `npx`. A hook that re-downloads a package on every message
+would be slow, would fail offline, and would make every message depend on the
+registry being up.
+
+## Updates reach the installed gate
+
+When you ship a new version, a colleague's skill directory updates on their next
+install, but the **plain-text copy of `gate.py` in their state directory** would
+otherwise stay at the old version — and new rules would never reach it. That is
+a silent failure, the worst kind.
+
+So every run of `scripts/starixs.py` first calls `gate_install.refresh_installed()`:
+
+- if no gate is installed, nothing happens (it does not install one)
+- if the installed gate is older, `gate.py` and `gate_rules.json` are replaced
+- if the installed gate is **newer**, it is left alone — an old package cannot downgrade a new gate
+- host hooks and settings are **never** touched by an update; those are the user's files
+
+## The policy numbers
+
+`config.json` holds one switch, `model_split`. Everything else — what counts as
+small, how many review rounds, which reviewer for which size — lives in the rule
+text, the way the design intends. There is no knob to turn that would quietly
+change the standard a team is held to.
+
+## Design decisions worth arguing about
+
+**The gate decides only what the literal text shows.** First message, short
+follow-up, mentions something irreversible. Whether a message is a correction,
+or whether a task is heavy, needs intent — so that stays with the agent. A gate
+that guesses intent wrong is worse than one that stays silent.
+
+**The gate's exit code is always 0.** If it can block a user's message, it is a
+liability, not a safeguard. Every failure mode in it ends in "print nothing,
+exit 0".
+
+**The gate does not record message content.** One line per message: time, host,
+session id, which rules were placed, message length, working directory. Enough
+to audit, nothing to leak.
+
+**Records carry no model names.** A test fails the build if a model slug or
+effort name appears in the source, the SKILL.md, or the rule files. Model choice
+is a run-time judgement, not a shipped constant.
+
+**Splits are per host.** A split pinned in Codex is never applied to Claude Code.
+An unrecognised host cannot save one at all.
+
+**The gate hook is wired by an installer that backs up first.** `settings.json`
+is someone else's file. It gets copied to `.bak` before any edit, and the
+uninstaller removes only the hook entries that carry our marker.
+
+**The hook command uses a stable interpreter.** Not the interpreter that happened
+to run the installer — that is often a temporary venv that disappears, leaving a
+hook that fails silently forever.
+
+## Layout
+
+```
+starixs/
+├── SKILL.md              the skill text the agent reads
+├── config.json           policy numbers
+├── install.py            dry-run-first installer
+├── scripts/starixs.py       the whole implementation, stdlib only
+└── tests/test_starixs.py    39 checks, no external deps, no network
+```
+
+## Requirements
+
+Python 3.9+. Standard library only. No network calls, no credential reads.
+
+## Verifying it yourself before distribution
+
+```bash
+python3 tests/test_starixs.py      # expect: 39 passed, 0 failed
+python3 install.py              # dry run, read every line it prints
+python3 scripts/starixs.py doctor  # environment check, declares "network": "unused"
+```
+
+Grep it. It is 700 lines of plain Python with no obfuscation, no dynamic imports,
+no network calls and no credential reads. That is the point of shipping it this
+way rather than as a sealed package.

@@ -1,0 +1,52 @@
+{
+  "name": "@starixs/crew",
+  "version": "1.0.0",
+  "description": "starixs crew — division of labour for heavy work: brain, hand, review, verify. Installs as an agent skill with a per-message gate hook.",
+  "keywords": [
+    "starixs",
+    "agent-skill",
+    "codex",
+    "claude-code",
+    "division-of-labour",
+    "review",
+    "verification"
+  ],
+  "license": "MIT",
+  "bin": {
+    "starixs": "bin/starixs.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/*.py",
+    "references/",
+    "skills/",
+    "tests/*.py",
+    "install.py",
+    "config.json",
+    "README.md",
+    "LICENSE",
+    "SKILL.full.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "scripts": {
+    "test": "node bin/starixs.js test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pluto-Mo/crew.git"
+  },
+  "homepage": "https://github.com/Pluto-Mo/crew#readme",
+  "bugs": {
+    "url": "https://github.com/Pluto-Mo/crew/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
