@@ -86,6 +86,30 @@ python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --off        # stop the n
 python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --on
 ```
 
+
+## Removing it
+
+When the user says they want it gone — 卸载 / uninstall / 删掉 / remove this:
+
+```bash
+python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --uninstall --all
+```
+
+One command removes three things: the skill folder, the gate and rule texts in
+`~/.local/share/starixs`, and the hook entries in the host config (backup taken
+first). Nothing else is touched.
+
+Variants, in case only part of it is unwanted:
+
+| Command | Removes |
+|---|---|
+| `--uninstall` | the hook and gate files; keeps the record directory |
+| `--uninstall --purge` | the above plus the record directory |
+| `--uninstall --all` | all of the above plus the skill folder |
+
+Run it from the copy inside the skill folder. If that path is gone, the hook can
+still be removed from a fresh checkout: `python3 scripts/gate_install.py --uninstall`.
+
 ## Before you say it is done
 
 Say what verification ran and what it showed, and name what you did not verify.

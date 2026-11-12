@@ -274,7 +274,16 @@ def apply(home=None, hosts=None, dry=False):
     return written
 
 
-def uninstall(home=None, purge=False):
+def own_skill_dir():
+    """这个脚本所在的那个 skill 目录（scripts/ 的上一层）。不在 skill 里时返回 None。"""
+    here = Path(__file__).resolve()
+    if here.parent.name != "scripts":
+        return None
+    folder = here.parent.parent
+    return folder if (folder / "SKILL.md").is_file() else None
+
+
+def uninstall(home=None, purge=False, skill=False):
     """撤掉门：去掉宿主的钩子、删 gate.py 和规则、删 Codex 插件。
 
     默认保留数据目录——那里是记录和开关，删了不可恢复，而用户说的"卸载"
@@ -317,6 +326,14 @@ def uninstall(home=None, purge=False):
         shutil.rmtree(market, ignore_errors=True)
         removed.append(str(market))
         print("removed " + str(market))
+    if skill:
+        folder = own_skill_dir()
+        if folder is not None:
+            shutil.rmtree(folder, ignore_errors=True)
+            removed.append(str(folder))
+            print("removed the skill folder " + str(folder))
+        else:
+            print("could not locate the skill folder from here; remove it by hand")
     if purge:
         if state.is_dir():
             shutil.rmtree(state, ignore_errors=True)
@@ -334,6 +351,8 @@ def main(argv) -> int:
     parser.add_argument("--apply", action="store_true", help="actually write (default is a dry run)")
     parser.add_argument("--uninstall", action="store_true", help="remove the hook, keep the record files")
     parser.add_argument("--purge", action="store_true", help="with --uninstall: remove the state directory too")
+    parser.add_argument("--all", action="store_true",
+                        help="with --uninstall: also remove this skill folder (one command, nothing left)")
     parser.add_argument("--check", action="store_true", help="report whether the hook is in place")
     parser.add_argument("--host", action="append", choices=list(gate._HOST_ORDER),
                         help="limit to one host; repeatable")
@@ -345,7 +364,7 @@ def main(argv) -> int:
         print(gate.check(home))
         return 0
     if args.uninstall:
-        uninstall(home, purge=args.purge)
+        uninstall(home, purge=args.purge or args.all, skill=args.all)
         return 0
     if not args.apply:
         print("Dry run. Nothing was changed. Add --apply to write.\n")

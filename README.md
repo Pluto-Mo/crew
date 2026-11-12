@@ -138,10 +138,10 @@ So every run of `scripts/starixs.py` first calls `gate_install.refresh_installed
 
 ## Uninstall
 
-One command, from anywhere:
+One command, from the installed copy:
 
 ```bash
-python3 ~/.agents/skills/crew/scripts/install.py --uninstall --purge
+python3 ~/.agents/skills/crew/scripts/gate_install.py --uninstall --all
 ```
 
 That removes three things and nothing else:
@@ -152,16 +152,21 @@ That removes three things and nothing else:
 | the gate and rule texts | `~/.local/share/starixs` |
 | the hook entries | `~/.claude/settings.json` (backup taken first), or the Codex plugin |
 
-Without `--purge` the state directory is kept — it holds the record of which
-rules were placed and the on/off switch. Those are your files; deleting them
-should be a decision, not a side effect of removing a hook.
+Three levels, because wanting one of them gone is not the same as wanting all
+of it gone:
 
-The gate alone:
+| Command | Removes |
+|---|---|
+| `--uninstall` | the hook entries and `gate.py`; keeps the record directory |
+| `--uninstall --purge` | the above, plus `~/.local/share/starixs` |
+| `--uninstall --all` | all of the above, plus the skill folder |
 
-```bash
-python3 ~/.agents/skills/crew/scripts/gate_install.py --uninstall         # keep records
-python3 ~/.agents/skills/crew/scripts/gate_install.py --uninstall --purge # remove records too
-```
+The record directory holds which rules were placed and the on/off switch. Those
+are your files; deleting them should be a decision, not a side effect of removing
+a hook — that is why it takes an extra flag.
+
+If the skill folder is already gone, the hook can still be removed from a
+checkout: `python3 scripts/gate_install.py --uninstall`.
 
 Nothing outside those paths is touched. Every write to `settings.json` leaves a
 timestamped `.bak` next to it, and the uninstaller only removes hook entries
