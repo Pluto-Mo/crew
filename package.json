@@ -1,6 +1,6 @@
 {
   "name": "@starixs/crew",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "starixs crew — division of labour for heavy work: brain, hand, review, verify. Installs as an agent skill with a per-message gate hook.",
   "keywords": [
     "starixs",

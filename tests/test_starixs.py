@@ -2,6 +2,7 @@
 """自测：python3 tests/test_starixs.py。不联网，无外部依赖。"""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -225,15 +226,16 @@ def main():
         check("规则文件也补上了", len(json.loads((ghome2 / "gate_rules.json").read_text())) >= 3,
               (ghome2 / "gate_rules.json").read_text()[:100])
 
-        # 更新的门不能被旧包换回去
-        (ghome2 / "gate.py").write_text(
-            gate_src.replace('GATE_PACKAGE_VERSION = ""', 'GATE_PACKAGE_VERSION = "99.0.0"')
-            if 'GATE_PACKAGE_VERSION = ""' in gate_src
-            else gate_src.split("VERSION = ")[0]
-            + 'GATE_PACKAGE_VERSION = "99.0.0"\nVERSION = "99.0.0"\n'
-            + gate_src.split("VERSION = ", 1)[1].split("\n", 1)[1])
+        # 更新的门不能被旧包换回去：拿真实的独立版，只把版本戳改高
+        gen = ("import sys; sys.path.insert(0, %r)\nimport gate_install\n"
+               "print(gate_install.standalone_source())\n") % str(ROOT / "scripts")
+        r = subprocess.run([sys.executable, "-c", gen], capture_output=True, text=True,
+                           env=dict(os.environ, STARIXS_HOME=str(ghome2)))
+        newer = r.stdout.replace('GATE_PACKAGE_VERSION = "', 'GATE_PACKAGE_VERSION = "99.')
+        (ghome2 / "gate.py").write_text(newer)
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
-        check("更新版本的门不会被旧包换回去", r.stdout.strip().splitlines()[0] == "False",
+        check("更新版本的门不会被旧包换回去",
+              r.stdout.strip().splitlines()[0] == "False" and "99." in r.stdout,
               r.stdout + r.stderr)
 
         # 没装过的不装
@@ -339,7 +341,34 @@ def main():
         check("门不注入中文版", "中文版" not in injected, injected[:200])
         check("门不注入内化问题", "内化问题" not in injected, injected[:200])
 
-        print("\n[16] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[16] 更新：--check 报出版本不一致，starixs.py 自动换门")
+        vh = Path(tmp) / "vh"
+        (vh / ".codex").mkdir(parents=True, exist_ok=True)
+        vh_skill = vh / ".agents/skills/crew"
+        shutil.copytree(ROOT / "skills" / "crew", vh_skill)
+        venv = dict(os.environ, STARIXS_HOME=str(vh / ".local/share/starixs"))
+
+        subprocess.run([sys.executable, str(vh_skill / "scripts" / "gate_install.py"),
+                        "--apply", "--home", str(vh), "--host", "codex"],
+                       capture_output=True, text=True, env=venv)
+
+        # 假装装的门是旧版
+        gp = vh / ".local/share/starixs/gate.py"
+        gp.write_text(gp.read_text().replace('GATE_PACKAGE_VERSION = "',
+                                             'GATE_PACKAGE_VERSION = "0.9.'))
+        r = subprocess.run([sys.executable, str(vh_skill / "scripts" / "gate.py"), "--check"],
+                           capture_output=True, text=True, env=venv)
+        check("报出装的门落后于 skill", "installed gate is 0.9." in r.stdout, r.stdout)
+        check("并给出下一步", "--apply to update it" in r.stdout, r.stdout)
+
+        # 跑一次 starixs.py，门应被自动换回当前版本
+        subprocess.run([sys.executable, str(vh_skill / "scripts" / "starixs.py"),
+                        "--tags", "steps=multi", "--host", "codex"],
+                       capture_output=True, text=True, env=venv)
+        stamp = [l for l in gp.read_text().splitlines() if "GATE_PACKAGE_VERSION" in l]
+        check("starixs.py 自动把门换成新版", stamp and "0.9." not in stamp[0], stamp)
+
+        print("\n[17] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)

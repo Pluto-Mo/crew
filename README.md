@@ -122,19 +122,46 @@ stale skill. `sync.py` is the only supported way to update the skill folder, and
 both `npm test` and `npm run prepack` fail when the two disagree. Nothing can be
 published with a drifting skill.
 
-## Updates reach the installed gate
+## Update
 
-A colleague's skill folder updates on their next install, but the **plain-text
-copy of `gate.py` in their state directory** would otherwise stay at the old
-version — and new rules would never reach it. That is a silent failure, the
-worst kind.
+One command, the same one you installed with:
 
-So every run of `scripts/starixs.py` first calls `gate_install.refresh_installed()`:
+```bash
+npx -y skills add Pluto-Mo/crew --skill crew -g -y
+```
 
-- if no gate is installed, nothing happens (it does not install one)
-- if the installed gate is older, `gate.py` and `gate_rules.json` are replaced
-- if the installed gate is **newer**, it is left alone — an old copy cannot downgrade a new gate
-- host hooks and settings are **never** touched by an update; those are the user's files
+It overwrites the skill folder in place. Local edits to those files are lost —
+by design: they are shipped files, not your config. Your settings live in
+`~/.local/share/starixs` and an update never touches that directory.
+
+### The gate follows on its own
+
+The installed hook runs from `~/.local/share/starixs/gate.py`, a separate copy,
+so replacing the skill folder does not by itself change what the hook injects.
+Two mechanisms close that gap:
+
+1. **Every run of `scripts/starixs.py` calls `refresh_installed()` first.** That
+   replaces an older `gate.py` and `gate_rules.json`. This is the normal path: the
+   agent runs the split on the first heavy task after an update, and the gate is
+   current from then on. Nothing to remember.
+2. **`--check` names the mismatch** when the installed copy is older than the
+   skill's, so a stale gate is visible rather than silent.
+
+An older skill can never downgrade a newer gate: the standalone copy carries a
+version stamp, and `refresh_installed` refuses to go backwards.
+
+Want the gate current right now instead of on next use:
+
+```bash
+python3 ~/.agents/skills/crew/scripts/gate_install.py --apply
+```
+
+### What an update never does
+
+- It does not touch your host hook wiring. `settings.json` and the Codex plugin
+  stay as they are; if the wiring itself needs changing, `--check` says so.
+- It does not remove anything you turned on or off. `--off` stays off.
+- It does not delete records. Those are yours.
 
 ## Uninstall
 

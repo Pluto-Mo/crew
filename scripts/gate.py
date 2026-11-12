@@ -315,6 +315,12 @@ def payload_from_args(args):
     return payload or None
 
 
+def _stamp(text):
+    """独立版里那行版本戳；没有返回空串。"""
+    match = re.search(r'^GATE_PACKAGE_VERSION = "([^"]*)"', text, re.M)
+    return match.group(1) if match else ""
+
+
 def host_by_env(env=None):
     env = os.environ if env is None else env
     for name in _HOST_ORDER:
@@ -448,6 +454,18 @@ def check(home=None):
                 lines.append("      next: run scripts/gate_install.py --apply")
         for rule in host_rules(name):
             lines.append(f"      extra rule: {rule}")
+    # 装的门和这个 skill 里的门是不是同一版：不是就说明该更新了
+    try:
+        installed = (HOME / "gate.py")
+        if installed.is_file() and RULES_DIR is not None:
+            got = _stamp(installed.read_text(encoding="utf-8"))
+            want = VERSION
+            if got and got != want:
+                lines.append(f"  installed gate is {got}, this skill is {want}")
+                lines.append("      next: run scripts/gate_install.py --apply to update it")
+    except (OSError, UnicodeError):
+        pass
+
     text = mother_block()
     lines.append("")
     if not active:
@@ -461,7 +479,7 @@ def check(home=None):
     return "\n".join(lines)
 
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def main(argv=None, stdin=None):
