@@ -368,7 +368,21 @@ def main():
         stamp = [l for l in gp.read_text().splitlines() if "GATE_PACKAGE_VERSION" in l]
         check("starixs.py 自动把门换成新版", stamp and "0.9." not in stamp[0], stamp)
 
-        print("\n[17] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[17] SKILL.md 支持对话更新和对话卸载")
+        skill_text = (ROOT / "skills" / "crew" / "SKILL.md").read_text()
+        check("description 里有更新触发词", "更新" in skill_text.split("---")[1]
+              and "update" in skill_text.split("---")[1])
+        check("description 里有卸载触发词", "卸载" in skill_text.split("---")[1])
+        check("有 Updating it 一节", "## Updating it" in skill_text)
+        check("更新用 skills add", "npx -y skills add Pluto-Mo/crew --skill crew -g -y" in skill_text)
+        check("更新后重装门", "gate_install.py" in skill_text and "--apply" in skill_text)
+        check("更新后报版本号", "starixs.py\" --version" in skill_text)
+        check("有 Removing it 一节", "## Removing it" in skill_text)
+        check("卸载是一条命令", "--uninstall --all" in skill_text)
+        check("明说本地设置不被更新动", "never touched by an update" in skill_text)
+        check("失败时不许手改文件假装新版", "hand-edit files to fake" in skill_text)
+
+        print("\n[18] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)

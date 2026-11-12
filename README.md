@@ -124,11 +124,18 @@ published with a drifting skill.
 
 ## Update
 
-One command, the same one you installed with:
+Just ask. Say 更新 / 升级 / update crew and the agent runs it — the trigger words
+are in the skill's description, so it knows what that means:
 
 ```bash
 npx -y skills add Pluto-Mo/crew --skill crew -g -y
+python3 ~/.agents/skills/crew/scripts/gate_install.py --apply
+python3 ~/.agents/skills/crew/scripts/starixs.py --version
 ```
+
+The third line is the point: it prints the version you now have, so "updated" is
+something you can read rather than something the agent asserts. Same for removal —
+say 卸载 / 删除 and it runs `--uninstall --all`.
 
 It overwrites the skill folder in place. Local edits to those files are lost —
 by design: they are shipped files, not your config. Your settings live in

@@ -1,6 +1,6 @@
 ---
 name: crew
-description: "Division of labour for heavy work: brain, hand, review, verify. Use when work is multi-step, touches several files or modules, or ends in something hard to undo (deploy, publish, delete, send, pay). Run it before starting, and again when a task that looked light turns out heavy. Not needed for chat, one-line answers, translation, naming, or a single small edit."
+description: "Division of labour for heavy work: brain, hand, review, verify. Use when work is multi-step, touches several files or modules, or ends in something hard to undo (deploy, publish, delete, send, pay). Run it before starting, and again when a task that looked light turns out heavy. Not needed for chat, one-line answers, translation, naming, or a single small edit. Also use it when the user says 更新 / 升级 / 有新版本吗 / update crew (update it), or 卸载 / 删除 / remove crew (remove it)."
 allowed-tools: Bash
 ---
 
@@ -15,6 +15,32 @@ once is how "done" becomes a claim instead of a fact.
 | Hand | Does the work | Judge its own result |
 | Review | Reads the result against the goal, fresh read-only context | Have done the work; be weaker than the hand |
 | Verify | Runs something that can fail | Be replaced by a model's opinion |
+
+## Updating it
+
+When the user says 更新 / 升级 / 有新版本吗 / update / upgrade — do it, do not ask
+whether they are sure:
+
+```bash
+npx -y skills add Pluto-Mo/crew --skill crew -g -y
+python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --apply
+python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --version
+```
+
+The first line replaces the skill folder; the second brings the installed gate to
+the same version; the third prints what you now have. Report that version number
+in one line — that is the proof it went through, not "updated successfully".
+
+`skills add` overwrites in place, so local edits to those files are lost. That is
+by design: they are shipped files. The user's own settings live in
+`~/.local/share/starixs` and are never touched by an update.
+
+If the first command fails because the machine is offline, say so and stop — an
+older gate keeps working, and the next run of `starixs.py` retries the gate
+refresh on its own. Do not hand-edit files to fake a newer version.
+
+Skip the second line if `gate_install.py --check` says no hook is installed:
+there is nothing to refresh, and the skill is enough on its own.
 
 ## Set up once, the first time you read this
 
