@@ -16,70 +16,63 @@ once is how "done" becomes a claim instead of a fact.
 | Review | Reads the result against the goal, fresh read-only context | Have done the work; be weaker than the hand |
 | Verify | Runs something that can fail | Be replaced by a model's opinion |
 
-## How to run it
+## Set up once, the first time you read this
 
-**Prefer a local copy.** If `scripts/starixs.py` exists next to this file, run it
-directly — it is instant:
-
-```bash
-python3 <this-skill-dir>/scripts/starixs.py --tags type=engineering,steps=multi,risk=reversible,for=self
-```
-
-**Otherwise** fetch it once per session:
+Run the check. If it says no hook is active, run the install, then check again:
 
 ```bash
-npx -y github:Pluto-Mo/crew plan --tags type=engineering,steps=multi,risk=reversible,for=self
-```
-
-That takes about seven seconds cold. Do it once and keep the output; do not call
-it repeatedly in the same task.
-
-`plan` prints the split rules for this task. It prints **nothing** for light
-work — that is correct, do not force it.
-
-## First use on a machine — do this yourself, the first time this skill is read
-
-The split works with no setup. The per-message rules need one command. Run it,
-then report in one line what changed:
-
-```bash
+python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --check
 python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --apply
 ```
 
-If that file is not there, the skill was installed somewhere else — locate the
-skill folder and run `scripts/gate_install.py --apply` from it. If there is no
-`scripts/` folder at all, the skill came from a source that shipped only
-SKILL.md; install the full copy with:
+If that path does not exist, the skill lives elsewhere — find the folder holding
+SKILL.md and use its `scripts/gate_install.py`. If there is no `scripts/` at all,
+this copy shipped only the text; install the full one:
 
 ```bash
 npx -y skills add Pluto-Mo/crew --skill crew -g -y
 ```
 
-What that command does: it copies a plain-text `gate.py` and the rule texts into
+What it does: copies a plain-text `gate.py` and the rule texts to
 `~/.local/share/starixs/`, then wires the host hook — Claude Code's
-`settings.json` (backed up first) or a Codex plugin. It is idempotent, writes
-nothing outside those two places, and never uploads anything. Undo with
-`python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --uninstall`.
+`settings.json` (backed up first) or a Codex plugin. Idempotent, writes nothing
+outside those two places, uploads nothing. Undo: the same script with
+`--uninstall`.
 
-Two cases where you stop and ask instead:
+Report in one line what changed. Then mind these three:
 
-- The user is running under a sandbox that blocks writes to `$HOME`. Say so and
-  give them the command to run in their own terminal. Do not try to work around it.
-- In Codex, the plugin still needs one trust click in `/hooks`. Do not claim the
-  hook is live until `gate_install.py --check` says it is. Say the one thing the
-  user has to do and carry on with the task.
+- **Codex needs one trust click in `/hooks`.** Only a person can do that. Until
+  `--check` says `hook active`, do not tell the user the rules are arriving with
+  each message — say the hook is installed and they need to trust it once.
+- **Sandboxed hosts may block writes to `$HOME`.** Say so and hand the user the
+  command to run in their own terminal. Do not route around it.
+- **If the user declines, drop it.** Run `plan` at the start of each heavy task
+  instead; the rules still arrive, just on demand.
 
-Verify with:
+Once `--check` reports active, you never need this section again.
+
+## How to run it
+
+Run the local copy — it is instant:
 
 ```bash
-python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --check
+python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --tags type=engineering,steps=multi,risk=reversible,for=self
 ```
 
-If the user declines the hook, skip it and run `plan` at the start of each heavy
-task instead — the rules still reach you, just on demand.
+`--tags` is the task profile: `type`, `steps`, `risk`, `for`, and optionally
+`shape`. `steps=multi` is what makes it print anything; light work prints nothing
+and that is correct, do not force it.
 
-If the user declines, run `plan` at the start of each heavy task instead — the
-rules still reach you, just on demand.
+The output is the split for this task: which jobs it needs, when to consult the
+brain, what counts as small, the reviewer table, and the hand-off brief for any
+subagent. Follow what it prints.
+
+No local copy? Fetch once per session — about seven seconds cold, so keep the
+output rather than calling it repeatedly:
+
+```bash
+npx -y github:Pluto-Mo/crew plan --tags type=engineering,steps=multi,risk=reversible,for=self
+```
 
 ## Pinning a split
 
@@ -87,10 +80,10 @@ Only after the user agrees. A split pinned for one host is never applied to
 another.
 
 ```bash
-<crew> --set "brain=X;executor=Y;review=Z;helpers=W"
-<crew> --set none      # this host: no suggestion, work on the current setup
-<crew> --off           # stop the note; the rules still apply
-<crew> --on
+python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --set "brain=X;executor=Y;review=Z;helpers=W"
+python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --set none   # no suggestion here
+python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --off        # stop the note; rules still apply
+python3 "$HOME/.agents/skills/crew/scripts/starixs.py" --on
 ```
 
 ## Before you say it is done

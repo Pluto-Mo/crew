@@ -61,25 +61,14 @@ expensive in exactly the way you notice too late.
 
 ## Give it to a colleague
 
-Send them this, exactly as written. Their agent does the rest — skill, hook,
-verification — and tells them what changed.
+Send them this:
 
-> Use the crew skill for this and keep using it for heavy work. If the skill is
+> Use the crew skill to split heavy work and keep using it. If the skill is
 > missing, install it first: `npx -y skills add Pluto-Mo/crew --skill crew -g -y`
-> — then run `python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --apply`
-> once so the rules arrive with every task message, and confirm with
-> `... --check`. In Codex you still have to click trust once in `/hooks`;
-> say so if that is the only thing left.
 
-Drop it into Claude Code, Cursor, Codex — whatever they use. Nothing else is
-needed: no clone, no npm login, no config editing.
-
-Two things the agent will not do on its own, by design:
-
-- **It will not click trust in Codex `/hooks`.** That click can only come from a
-  person, and the agent is told to say so rather than pretend the hook is live.
-- **It will not install anything if the user says no.** The fallback is running
-  `plan` at the start of each heavy task — the rules still arrive, just later.
+That is the whole message. The skill text tells the agent to finish the setup
+itself on first read — the hook, the rule texts, and a check that says whether
+it is actually live. Nothing else to install, no clone, no npm login.
 
 ## Install
 
