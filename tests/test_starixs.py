@@ -314,7 +314,32 @@ def main():
                            capture_output=True, text=True, env=env_u)
         check("--purge 连状态目录一起删", not (uh / ".local/share/starixs").exists(), r.stdout)
 
-        print("\n[15] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[15] 规则文件双语，但门只注入英文主体")
+        import re as _re
+        rules_dir = ROOT / "references" / "rules"
+        for rule in sorted(rules_dir.glob("*.md")):
+            text = rule.read_text(encoding="utf-8")
+            zh = len(_re.findall(r"[\u4e00-\u9fff]", text))
+            en = len(_re.findall(r"[A-Za-z]", text))
+            check("%s 有中文版" % rule.name, "## 中文版" in text, rule.name)
+            check("%s 有内化问题" % rule.name, "## 内化问题" in text, rule.name)
+            check("%s 中文占比合理" % rule.name, zh / max(zh + en, 1) > 0.2,
+                  f"{zh}/{zh + en}")
+            for key in ("何时用", "不该用", "打破的默认", "fixes", "when", "not_when"):
+                check("%s 有 %s" % (rule.name, key), key + ":" in text, rule.name)
+
+        # 门只取 frontmatter 之后、第一个 "## " 之前的部分
+        body = gate_rule_body = None
+        code = ("import sys; sys.path.insert(0, %r)\nimport gate\n"
+                "print(gate.rule_text(%r))\n") % (str(ROOT / "scripts"), "重活四岗")
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                           env=dict(os.environ, STARIXS_HOME=str(Path(tmp) / "bi")))
+        injected = r.stdout
+        check("门注入英文主体", "I want heavy work run as separate jobs" in injected, injected[:200])
+        check("门不注入中文版", "中文版" not in injected, injected[:200])
+        check("门不注入内化问题", "内化问题" not in injected, injected[:200])
+
+        print("\n[16] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)
