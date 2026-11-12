@@ -258,6 +258,12 @@ def main():
         check("subprocess 只用于读了也白读的地方", "subprocess." not in text, "found subprocess")
         print("  (参照实现里也没有 subprocess；本版保持一致)")
 
+        print("\n[13] skill 目录与仓库根同步（分发时不能漂移）")
+        import subprocess as _sp
+        r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
+                    capture_output=True, text=True)
+        check("skills/crew 与根目录一致", r.returncode == 0, r.stdout + r.stderr)
+
     print(f"\n{passed} passed, {failed} failed")
     return 1 if failed else 0
 

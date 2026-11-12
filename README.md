@@ -61,66 +61,68 @@ expensive in exactly the way you notice too late.
 
 ## Install
 
-Two routes. Pick whichever fits how your team works.
-
-### Route A — the skills CLI (same as okkhtml)
+### Route A — one command, nothing to trust
 
 ```bash
 npx -y skills add Pluto-Mo/crew --skill crew -g -y
 ```
 
-That drops the thin `SKILL.md` into `~/.agents/skills/crew/`, which is what makes
-the agent notice the skill. The rules themselves are not copied — they come from
-the CLI on demand.
+That copies the whole skill folder into `~/.agents/skills/crew/` — SKILL.md, the
+four scripts, the rule texts. It runs with no network afterwards. This is the
+route to use when you just want the split.
 
-### Route B — the npm package, with the gate
+### Route B — the same thing plus the per-message gate
 
 ```bash
-npx @starixs/crew install                       # dry run: every path it would write
-npx @starixs/crew install --apply --with-gate   # skill + per-message hook
-npx @starixs/crew check                         # is the hook wired?
-npx @starixs/crew uninstall
+npx -y github:Pluto-Mo/crew install --apply --with-gate
+npx -y github:Pluto-Mo/crew check
 ```
 
-Route B also installs the hook, so the rules arrive with every task message
-instead of only when the agent thinks to look them up.
+Route A gives you the rules on demand. Route B also puts them in front of the
+agent on **every** task message, including the ones where it is rushing and would
+not think to look anything up. That needs a hook, and a hook needs a stable file
+on disk, so the installer copies a plain-text `gate.py` and the rule texts into
+`~/.local/share/starixs/` and wires the host.
 
-**There is no postinstall hook.** `npm install` writes nothing outside
-`node_modules`. A package that silently rewires your agent on install is exactly
-what the gate's own audit rules would flag.
+`install` without `--apply` prints every path it would write and changes nothing.
 
-## Why two routes
+There is no postinstall hook. Nothing touches your agent config until you run
+`install --apply`. A package that silently rewires your agent on install is
+exactly what the gate's own audit rules would flag.
 
-`skills add` copies a folder and stops there — good enough for a skill whose
-whole job is "run this command when asked". The division-of-labour rules have a
-second requirement: they must be in front of the agent *on every message*,
-including the messages where it is rushing and would not think to look anything
-up. That needs a hook, and a hook needs a stable file on disk.
+## Why the repo looks like this
 
-So the split is:
+```
+crew/
+├── skills/crew/          <- `skills add` copies this folder, and only this one
+│   ├── SKILL.md
+│   ├── scripts/          <- mirrored from ../scripts
+│   ├── references/rules/ <- mirrored from ../references/rules
+│   └── config.json
+├── scripts/              <- single source of truth; the npm entry point and tests use these
+├── references/rules/     <- ditto
+├── bin/starixs.js        <- npm entry point
+├── sync.py               <- copies root -> skills/crew, and --check fails on drift
+└── tests/
+```
 
-| Layer | How it ships |
-|---|---|
-| Skill text | `skills/crew/SKILL.md` — thin, installed by either route |
-| Rules and logic | `scripts/` — run from the package, or from the installed copy |
-| Gate | `install --apply --with-gate` copies a plain-text `gate.py` and the rule texts to `~/.local/share/starixs/` and wires the host hook |
-
-The hook never runs `npx`. A hook that re-downloads a package on every message
-would be slow, would fail offline, and would make every message depend on the
-registry being up.
+Two copies of the same script is a trap: edit one, forget the other, ship a
+stale skill. `sync.py` is the only supported way to update the skill folder, and
+both `npm test` and `npm run prepack` fail when the two disagree. Nothing can be
+published with a drifting skill.
 
 ## Updates reach the installed gate
 
-When you ship a new version, a colleague's skill directory updates on their next
-install, but the **plain-text copy of `gate.py` in their state directory** would
-otherwise stay at the old version — and new rules would never reach it. That is
-a silent failure, the worst kind.
+A colleague's skill folder updates on their next install, but the **plain-text
+copy of `gate.py` in their state directory** would otherwise stay at the old
+version — and new rules would never reach it. That is a silent failure, the
+worst kind.
 
 So every run of `scripts/starixs.py` first calls `gate_install.refresh_installed()`:
 
 - if no gate is installed, nothing happens (it does not install one)
 - if the installed gate is older, `gate.py` and `gate_rules.json` are replaced
-- if the installed gate is **newer**, it is left alone — an old package cannot downgrade a new gate
+- if the installed gate is **newer**, it is left alone — an old copy cannot downgrade a new gate
 - host hooks and settings are **never** touched by an update; those are the user's files
 
 ## The policy numbers

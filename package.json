@@ -25,7 +25,8 @@
     "config.json",
     "README.md",
     "LICENSE",
-    "SKILL.full.md"
+    "SKILL.full.md",
+    "sync.py"
   ],
   "engines": {
     "node": ">=16"
@@ -36,7 +37,9 @@
     "win32"
   ],
   "scripts": {
-    "test": "node bin/starixs.js test"
+    "test": "node bin/starixs.js test",
+    "sync": "python3 sync.py",
+    "prepack": "python3 sync.py --check"
   },
   "repository": {
     "type": "git",
