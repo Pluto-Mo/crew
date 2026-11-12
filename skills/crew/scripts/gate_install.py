@@ -274,9 +274,15 @@ def apply(home=None, hosts=None, dry=False):
     return written
 
 
-def uninstall(home=None):
+def uninstall(home=None, purge=False):
+    """撤掉门：去掉宿主的钩子、删 gate.py 和规则、删 Codex 插件。
+
+    默认保留数据目录——那里是记录和开关，删了不可恢复，而用户说的"卸载"
+    通常只是不想再要这个钩子。--purge 才连数据目录一起删。
+    """
     home = Path.home() if home is None else Path(home)
     state = (home / ".local" / "share" / "starixs") if home == Path.home() else home / ".local/share/starixs"
+    removed = []
     settings = claude_settings(home)
     if settings.is_file():
         try:
@@ -298,23 +304,36 @@ def uninstall(home=None):
                 backup = settings.with_name(settings.name + ".starixs-uninstall-" + time.strftime("%Y%m%d-%H%M%S") + ".bak")
                 shutil.copy2(settings, backup)
                 settings.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+                removed.append(str(settings))
                 print("removed our hooks from " + str(settings))
     for name in ("gate.py", "gate_rules.json"):
         target = state / name
         if target.is_file():
             target.unlink()
+            removed.append(str(target))
             print("removed " + str(target))
     market = state / MARKER
     if market.is_dir():
         shutil.rmtree(market, ignore_errors=True)
+        removed.append(str(market))
         print("removed " + str(market))
-    print("state left in place: " + str(state))
+    if purge:
+        if state.is_dir():
+            shutil.rmtree(state, ignore_errors=True)
+            removed.append(str(state))
+            print("removed the whole state directory " + str(state))
+        print("Gate and all local state removed.")
+    else:
+        print("state left in place: " + str(state))
+        print("  (record and switch files; pass --purge to remove those too)")
+    return removed
 
 
 def main(argv) -> int:
     parser = argparse.ArgumentParser(description="Install the starixs gate hook.")
     parser.add_argument("--apply", action="store_true", help="actually write (default is a dry run)")
-    parser.add_argument("--uninstall", action="store_true")
+    parser.add_argument("--uninstall", action="store_true", help="remove the hook, keep the record files")
+    parser.add_argument("--purge", action="store_true", help="with --uninstall: remove the state directory too")
     parser.add_argument("--check", action="store_true", help="report whether the hook is in place")
     parser.add_argument("--host", action="append", choices=list(gate._HOST_ORDER),
                         help="limit to one host; repeatable")
@@ -326,7 +345,7 @@ def main(argv) -> int:
         print(gate.check(home))
         return 0
     if args.uninstall:
-        uninstall(home)
+        uninstall(home, purge=args.purge)
         return 0
     if not args.apply:
         print("Dry run. Nothing was changed. Add --apply to write.\n")

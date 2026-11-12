@@ -105,13 +105,34 @@ def run_gate_install(extra):
     return subprocess.call([sys.executable, str(script), *extra])
 
 
-def do_uninstall():
+def do_uninstall(purge=False):
+    """删掉这份 installer 写进 skill 目录的东西。
+
+    --purge 连门和本地状态一起撤，一条命令干净。不带时只删 skill 目录，
+    并告诉用户还剩什么。
+    """
+    removed = []
     for name, dest in TARGETS.items():
         if not (dest / MARKER).is_file():
             continue
         shutil.rmtree(dest, ignore_errors=True)
+        removed.append(str(dest))
         print("removed " + str(dest))
-    print("Run `python3 scripts/gate_install.py --uninstall` to remove the gate hook.")
+    # 用户用 npx skills add 装的目录没有我们的标记，但也是同一个 skill
+    for name, dest in TARGETS.items():
+        if dest.is_dir() and (dest / "SKILL.md").is_file() and (dest / "scripts" / "starixs.py").is_file():
+            shutil.rmtree(dest, ignore_errors=True)
+            removed.append(str(dest))
+            print("removed " + str(dest) + " (installed by skills add)")
+    if purge:
+        return run_gate_install(["--uninstall", "--purge"])
+    if removed:
+        print("\nSkill removed. The gate hook may still be in place.")
+        print("Remove it too: python3 scripts/gate_install.py --uninstall")
+        print("Remove everything: python3 install.py --uninstall --purge")
+    else:
+        print("Nothing to remove from the skill folders.")
+        print("Check the gate: python3 scripts/gate_install.py --check")
     return 0
 
 
@@ -119,7 +140,8 @@ def main(argv):
     parser = argparse.ArgumentParser(description="Install starixs as an agent skill.")
     parser.add_argument("--apply", action="store_true", help="actually write (default is a dry run)")
     parser.add_argument("--force", action="store_true", help="overwrite a directory we did not create")
-    parser.add_argument("--uninstall", action="store_true")
+    parser.add_argument("--uninstall", action="store_true", help="remove the skill folders")
+    parser.add_argument("--purge", action="store_true", help="with --uninstall: also remove the gate and local state")
     parser.add_argument("--with-gate", action="store_true", help="also install the per-message gate hook")
     parser.add_argument("--check", action="store_true", help="report whether the gate hook is in place")
     parser.add_argument("--target", action="append", choices=sorted(TARGETS),
@@ -129,7 +151,7 @@ def main(argv):
     if args.check:
         return run_gate_install(["--check"])
     if args.uninstall:
-        return do_uninstall()
+        return do_uninstall(purge=args.purge)
 
     targets = args.target or ["agents"]
     if not args.apply:

@@ -136,6 +136,41 @@ So every run of `scripts/starixs.py` first calls `gate_install.refresh_installed
 - if the installed gate is **newer**, it is left alone — an old copy cannot downgrade a new gate
 - host hooks and settings are **never** touched by an update; those are the user's files
 
+## Uninstall
+
+One command, from anywhere:
+
+```bash
+python3 ~/.agents/skills/crew/scripts/install.py --uninstall --purge
+```
+
+That removes three things and nothing else:
+
+| Removed | Where |
+|---|---|
+| the skill folder | `~/.agents/skills/crew` (or `~/.claude/skills/crew`) |
+| the gate and rule texts | `~/.local/share/starixs` |
+| the hook entries | `~/.claude/settings.json` (backup taken first), or the Codex plugin |
+
+Without `--purge` the state directory is kept — it holds the record of which
+rules were placed and the on/off switch. Those are your files; deleting them
+should be a decision, not a side effect of removing a hook.
+
+The gate alone:
+
+```bash
+python3 ~/.agents/skills/crew/scripts/gate_install.py --uninstall         # keep records
+python3 ~/.agents/skills/crew/scripts/gate_install.py --uninstall --purge # remove records too
+```
+
+Nothing outside those paths is touched. Every write to `settings.json` leaves a
+timestamped `.bak` next to it, and the uninstaller only removes hook entries
+carrying our marker — if you added hooks of your own, they stay.
+
+Kill only what you want gone: a colleague who wants the per-message rules but
+not the skill runs the gate uninstall; one who wants neither runs the first
+command.
+
 ## The policy numbers
 
 `config.json` holds one switch, `model_split`. Everything else — what counts as

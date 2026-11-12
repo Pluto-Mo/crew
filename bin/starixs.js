@@ -46,7 +46,7 @@ function usage() {
   npx @starixs/crew install [--with-gate] [--target codex|claude|agents]
   npx @starixs/crew install --apply --with-gate   write it
   npx @starixs/crew check                         is the hook wired?
-  npx @starixs/crew uninstall
+  npx @starixs/crew uninstall [--purge]           remove the skill (+ gate and state)
   npx @starixs/crew test
 
   npx @starixs/crew plan --tags ...               the split for a task
@@ -98,7 +98,10 @@ function main(argv) {
   }
 
   if (command === "uninstall") {
-    const skill = run(python, INSTALL, ["--uninstall"]);
+    // --purge: one command removes the skill, the hook and the local state.
+    const purge = rest.includes("--purge");
+    const skill = run(python, INSTALL, ["--uninstall", ...(purge ? ["--purge"] : [])]);
+    if (purge) return skill;
     const gate = run(python, GATE_INSTALL, ["--uninstall"]);
     return skill || gate;
   }

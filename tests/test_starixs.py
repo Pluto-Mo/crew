@@ -291,7 +291,30 @@ def main():
         r = gate_check(ch)
         check("信任并启用后才说 hook active", "Codex: hook active" in r.stdout, r.stdout)
 
-        print("\n[14] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[14] 卸载：默认留记录，--purge 删干净")
+        uh = Path(tmp) / "unhome"
+        (uh / ".codex").mkdir(parents=True, exist_ok=True)
+        (uh / ".claude").mkdir(parents=True, exist_ok=True)
+        env_u = dict(os.environ, STARIXS_HOME=str(uh / ".local/share/starixs"))
+        gi = str(ROOT / "scripts" / "gate_install.py")
+
+        subprocess.run([sys.executable, gi, "--apply", "--home", str(uh), "--host", "claude"],
+                       capture_output=True, text=True, env=env_u)
+        check("装有门", (uh / ".local/share/starixs/gate.py").is_file())
+        check("claude 有钩子", "gate.py" in (uh / ".claude/settings.json").read_text())
+
+        r = subprocess.run([sys.executable, gi, "--uninstall", "--home", str(uh)],
+                           capture_output=True, text=True, env=env_u)
+        check("默认卸载去掉钩子", json.loads((uh / ".claude/settings.json").read_text()).get("hooks") == {},
+              r.stdout)
+        check("默认卸载删 gate.py", not (uh / ".local/share/starixs/gate.py").exists())
+        check("默认卸载留下状态目录", (uh / ".local/share/starixs").is_dir(), r.stdout)
+
+        r = subprocess.run([sys.executable, gi, "--uninstall", "--purge", "--home", str(uh)],
+                           capture_output=True, text=True, env=env_u)
+        check("--purge 连状态目录一起删", not (uh / ".local/share/starixs").exists(), r.stdout)
+
+        print("\n[15] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)
