@@ -269,7 +269,6 @@ def apply(home=None, hosts=None, dry=False):
                 plugin_file.write_text(json.dumps(plugin_payload, ensure_ascii=False, indent=1), encoding="utf-8")
                 print("wrote " + str(hooks_file))
                 print("wrote " + str(plugin_file))
-                print("next: in Codex, trust the plugin once in /hooks")
 
     return written
 
@@ -346,6 +345,61 @@ def uninstall(home=None, purge=False, skill=False):
     return removed
 
 
+def ensure(home=None):
+    """幂等：门已经在跑了就什么都不做；没装或装坏了就装上。
+
+    退出码：0 = 门活着或刚装好；1 = 装了但还差用户点一下信任；2 = 环境挡住写不了。
+    这样调用方不用自己解析状态——一条命令，看退出码。
+    """
+    home = Path.home() if home is None else Path(home)
+    state = (home / ".local" / "share" / "starixs") if home == Path.home() else home / ".local/share/starixs"
+
+    hosts = [n for n in gate._HOST_ORDER if gate.host_present(n, home)]
+    wired = [n for n in hosts if gate.HOSTS[n].get("hook") in ("settings", "plugin")]
+    if not wired:
+        print("No host with hook support found on this machine. Nothing to install; the skill works on demand.")
+        return 0
+
+    # 已经活着的什么都不做；装了一半（文件在、还差信任）也不重写，只提示
+    states = {n: gate.hook_state(n, home) for n in wired}
+    if all(states[n].get("active") or states[n].get("installed") for n in wired):
+        for name in wired:
+            label = gate.HOSTS[name]["label"]
+            if states[name].get("active"):
+                print("%s: hook active" % label)
+            elif states[name].get("trusted") is False:
+                print("%s: installed — needs one trust click in /hooks" % label)
+            elif states[name].get("enabled") is False:
+                print("%s: installed and trusted — needs enabling in plugins" % label)
+            else:
+                print("%s: installed" % label)
+        return 0 if all(states[n].get("active") for n in wired) else 1
+
+    try:
+        apply(home, wired)
+    except (OSError, PermissionError) as error:
+        print("Could not write the gate: %s" % error)
+        print("This needs permission to write under your home directory.")
+        print("Run it yourself in a terminal: python3 %s --apply" % Path(__file__).resolve())
+        return 2
+
+    pending = [n for n in wired if not gate.hook_present(n, home)]
+    for name in wired:
+        state_info = gate.hook_state(name, home)
+        label = gate.HOSTS[name]["label"]
+        if state_info.get("active"):
+            print("%s: hook active" % label)
+        elif not state_info.get("installed"):
+            print("%s: files written but the hook is not registered" % label)
+        elif state_info.get("trusted") is False:
+            print("%s: installed — needs one trust click in /hooks" % label)
+        elif state_info.get("enabled") is False:
+            print("%s: installed and trusted — needs enabling in plugins" % label)
+        else:
+            print("%s: installed" % label)
+    return 0 if not pending else 1
+
+
 def main(argv) -> int:
     parser = argparse.ArgumentParser(description="Install the starixs gate hook.")
     parser.add_argument("--apply", action="store_true", help="actually write (default is a dry run)")
@@ -354,6 +408,8 @@ def main(argv) -> int:
     parser.add_argument("--all", action="store_true",
                         help="with --uninstall: also remove this skill folder (one command, nothing left)")
     parser.add_argument("--check", action="store_true", help="report whether the hook is in place")
+    parser.add_argument("--ensure", action="store_true",
+                        help="idempotent: install the hook if it is not already active, else do nothing")
     parser.add_argument("--host", action="append", choices=list(gate._HOST_ORDER),
                         help="limit to one host; repeatable")
     parser.add_argument("--home", help="override home directory (for testing)")
@@ -363,6 +419,8 @@ def main(argv) -> int:
     if args.check:
         print(gate.check(home))
         return 0
+    if args.ensure:
+        return ensure(home)
     if args.uninstall:
         uninstall(home, purge=args.purge or args.all, skill=args.all)
         return 0

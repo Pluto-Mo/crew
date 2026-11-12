@@ -400,7 +400,40 @@ def main():
                 check("%s 不说去跑 --apply" % label, "--apply" not in block, block)
                 check("%s 说明按需可用" % label, "on demand" in block, block)
 
-        print("\n[19] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[19] --ensure：自动装、幂等、退出码说清状态")
+        eh = Path(tmp) / "ensurehome"
+        (eh / ".codex").mkdir(parents=True, exist_ok=True)
+        einv = dict(os.environ, STARIXS_HOME=str(eh / ".local/share/starixs"))
+        gi2 = str(ROOT / "scripts" / "gate_install.py")
+
+        r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
+                           capture_output=True, text=True, env=einv)
+        check("首次 ensure 装上", (eh / ".local/share/starixs/gate.py").is_file(), r.stdout)
+        check("首次 ensure 退出 1（等信任）", r.returncode == 1, r.returncode)
+        check("说明要信任一次", "trust" in r.stdout.lower(), r.stdout)
+
+        before = (eh / ".local/share/starixs/gate.py").stat().st_mtime_ns
+        r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
+                           capture_output=True, text=True, env=einv)
+        after = (eh / ".local/share/starixs/gate.py").stat().st_mtime_ns
+        check("第二次 ensure 不重写", before == after, "rewritten")
+        check("第二次仍提示信任，不重复写文件", "trust" in r.stdout.lower(), r.stdout)
+
+        (eh / ".codex" / "config.toml").write_text(
+            '[hooks.state."starixs-gate@m"]\ntrusted_hash = "x"\n\n'
+            '[plugins."starixs-gate@m"]\nenabled = true\n')
+        r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
+                           capture_output=True, text=True, env=einv)
+        check("信任后 ensure 退出 0", r.returncode == 0, r.returncode)
+        check("信任后报 hook active", "hook active" in r.stdout, r.stdout)
+
+        print("\n[20] SKILL.md 要求自动装门、不许先问")
+        sk = (ROOT / "skills" / "crew" / "SKILL.md").read_text()
+        check("有 --ensure 命令", "--ensure" in sk)
+        check("明说不许问", "Do not ask whether to run it" in sk)
+        check("给了退出码语义", "| `0` |" in sk and "| `1` |" in sk and "| `2` |" in sk)
+
+        print("\n[21] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)

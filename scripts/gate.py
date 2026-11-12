@@ -483,7 +483,7 @@ def check(home=None):
     return "\n".join(lines)
 
 
-VERSION = "1.1.1"
+VERSION = "1.2.1"
 
 
 def main(argv=None, stdin=None):
