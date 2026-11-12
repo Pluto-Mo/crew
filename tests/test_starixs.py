@@ -406,15 +406,27 @@ def main():
         einv = dict(os.environ, STARIXS_HOME=str(eh / ".local/share/starixs"))
         gi2 = str(ROOT / "scripts" / "gate_install.py")
 
+        einv_codex = dict(einv, CODEX_THREAD_ID="t-1")
+
+        # 认不出宿主时：什么都不写，退出 2
+        bare = dict(einv)
+        for k in ("CODEX_THREAD_ID", "CODEX_HOME", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):
+            bare.pop(k, None)
         r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
-                           capture_output=True, text=True, env=einv)
+                           capture_output=True, text=True, env=bare)
+        check("认不出宿主就什么都不写", r.returncode == 2 and not (eh / ".local/share/starixs").exists(),
+              r.stdout)
+        check("并告诉用户 --host 怎么用", "--host codex" in r.stdout, r.stdout)
+
+        r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
+                           capture_output=True, text=True, env=einv_codex)
         check("首次 ensure 装上", (eh / ".local/share/starixs/gate.py").is_file(), r.stdout)
         check("首次 ensure 退出 1（等信任）", r.returncode == 1, r.returncode)
         check("说明要信任一次", "trust" in r.stdout.lower(), r.stdout)
 
         before = (eh / ".local/share/starixs/gate.py").stat().st_mtime_ns
         r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
-                           capture_output=True, text=True, env=einv)
+                           capture_output=True, text=True, env=einv_codex)
         after = (eh / ".local/share/starixs/gate.py").stat().st_mtime_ns
         check("第二次 ensure 不重写", before == after, "rewritten")
         check("第二次仍提示信任，不重复写文件", "trust" in r.stdout.lower(), r.stdout)
@@ -423,9 +435,24 @@ def main():
             '[hooks.state."starixs-gate@m"]\ntrusted_hash = "x"\n\n'
             '[plugins."starixs-gate@m"]\nenabled = true\n')
         r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(eh)],
-                           capture_output=True, text=True, env=einv)
+                           capture_output=True, text=True, env=einv_codex)
         check("信任后 ensure 退出 0", r.returncode == 0, r.returncode)
         check("信任后报 hook active", "hook active" in r.stdout, r.stdout)
+
+        print("\n[19b] 在 Codex 里装，不碰 Claude Code 的配置")
+        xh = Path(tmp) / "xhost"
+        (xh / ".codex").mkdir(parents=True, exist_ok=True)
+        (xh / ".claude").mkdir(parents=True, exist_ok=True)
+        (xh / ".claude" / "settings.json").write_text('{"hooks": {}}')
+        r = subprocess.run([sys.executable, gi2, "--ensure", "--home", str(xh)],
+                           capture_output=True, text=True,
+                           env=dict(os.environ, CODEX_THREAD_ID="t-2",
+                                    STARIXS_HOME=str(xh / ".local/share/starixs")))
+        check("Codex 插件装了", (xh / ".local/share/starixs/starixs-gate/hooks/hooks.json").is_file(), r.stdout)
+        check("Claude settings 一个字节没动",
+              json.loads((xh / ".claude/settings.json").read_text()) == {"hooks": {}}, r.stdout)
+        check("也没给 Claude 建备份文件",
+              not list((xh / ".claude").glob("*.bak")), list((xh / ".claude").glob("*.bak")))
 
         print("\n[20] SKILL.md 要求自动装门、不许先问")
         sk = (ROOT / "skills" / "crew" / "SKILL.md").read_text()

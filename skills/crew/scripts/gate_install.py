@@ -178,10 +178,21 @@ def plan(home=None, hosts=None):
     return steps
 
 
+def current_host():
+    """正在跑我们的是哪家宿主。装门只接这一家——在 Codex 里装就不该动 Claude Code 的配置。"""
+    return gate.host_by_env()
+
+
 def apply(home=None, hosts=None, dry=False):
     home = Path.home() if home is None else Path(home)
     state = (home / ".local" / "share" / "starixs") if home == Path.home() else home / ".local/share/starixs"
-    hosts = hosts or [n for n in gate._HOST_ORDER]
+    if hosts is None:
+        here = current_host()
+        if not here:
+            print("Cannot tell which host is running this. Nothing was wired.")
+            print("Pass --host codex or --host claude to say which one.")
+            return []
+        hosts = [here]
     written = []
 
     if not dry:
@@ -345,7 +356,7 @@ def uninstall(home=None, purge=False, skill=False):
     return removed
 
 
-def ensure(home=None):
+def ensure(home=None, hosts=None):
     """幂等：门已经在跑了就什么都不做；没装或装坏了就装上。
 
     退出码：0 = 门活着或刚装好；1 = 装了但还差用户点一下信任；2 = 环境挡住写不了。
@@ -354,11 +365,16 @@ def ensure(home=None):
     home = Path.home() if home is None else Path(home)
     state = (home / ".local" / "share" / "starixs") if home == Path.home() else home / ".local/share/starixs"
 
-    hosts = [n for n in gate._HOST_ORDER if gate.host_present(n, home)]
-    wired = [n for n in hosts if gate.HOSTS[n].get("hook") in ("settings", "plugin")]
-    if not wired:
-        print("No host with hook support found on this machine. Nothing to install; the skill works on demand.")
+    here = (hosts or [None])[0] if hosts else current_host()
+    if not here:
+        print("Cannot tell which host is running this, so nothing was wired.")
+        print("Run it as: python3 gate_install.py --ensure --host codex   (or claude)")
+        return 2
+    if gate.HOSTS.get(here, {}).get("hook") not in ("settings", "plugin"):
+        print("%s has no per-message hook in this build. The skill still works on demand."
+              % gate.HOSTS.get(here, {}).get("label", here))
         return 0
+    wired = [here]
 
     # 已经活着的什么都不做；装了一半（文件在、还差信任）也不重写，只提示
     states = {n: gate.hook_state(n, home) for n in wired}
@@ -420,7 +436,7 @@ def main(argv) -> int:
         print(gate.check(home))
         return 0
     if args.ensure:
-        return ensure(home)
+        return ensure(home, args.host)
     if args.uninstall:
         uninstall(home, purge=args.purge or args.all, skill=args.all)
         return 0

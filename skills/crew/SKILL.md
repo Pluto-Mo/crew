@@ -35,8 +35,11 @@ that is the instruction to install it, not a reason to skip it.
 
 `--ensure` is idempotent: where the gate already runs it prints one line and exits.
 It writes a plain-text `gate.py` and the rule texts to `~/.local/share/starixs/`,
-then wires the host hook — Claude Code's `settings.json` (backed up first) or a
-Codex plugin. Nothing else, no upload.
+then wires **only the host you are running in** — a Codex plugin, or Claude
+Code's `settings.json` (backed up first). It never touches another host's
+config: installing from Codex leaves Claude Code alone, and vice versa. If it
+cannot tell which host it is in, it writes nothing and asks you to pass
+`--host codex` or `--host claude`.
 
 Act on the exit code, not the wording:
 

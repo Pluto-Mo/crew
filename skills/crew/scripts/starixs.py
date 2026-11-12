@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 UNKNOWN_HOST = "其他"
 _SET = 'brain=NAME;executor=NAME;review=NAME;helpers=NAME,NAME'
 _NONE = "none"
