@@ -335,10 +335,46 @@ def host_present(name, home=None):
     return bool(directory and directory.is_dir())
 
 
-def hook_present(tool, home=None):
-    """钩子装上了没有：Claude 看 settings.json 里有没有我们的命令；Codex 看插件市场里的 hooks.json。"""
+def codex_trusted(home=None):
+    """Codex 的 config.toml 里给我们的插件记了几条信任（[hooks.state."starixs-gate@…"] 下有 trusted_hash）。
+    读不到算 0。装了插件不等于它在跑：Codex 要求用户在 /hooks 里信任一次。"""
     home = Path.home() if home is None else Path(home)
-    marker = "starixs-gate" if tool == "codex" else "starixs_gate.py"
+    try:
+        text = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    return sum(1 for match in re.finditer(
+        r'(?ms)^\[hooks\.state\."starixs-gate@[^"\n]*"\]\n(.*?)(?=^\[|\Z)', text)
+        if re.search(r"^\s*trusted_hash\s*=", match.group(1), re.M))
+
+
+def codex_enabled(home=None, market=None):
+    """Codex 的 config.toml 里 [plugins."starixs-gate@<市场>"] 是不是 enabled = true。
+    市场名不传就接受任意市场（安装时用的是本地目录市场）。读不到算 False。"""
+    home = Path.home() if home is None else Path(home)
+    try:
+        text = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    name = re.escape("starixs-gate@" + (market or ""))
+    pattern = re.escape('"starixs-gate@') + (re.escape(market) if market else r'[^"]*') + re.escape('"')
+    if re.search(r'(?ms)^\[plugins\.' + pattern + r'\]\n(.*?)(?=^\[|\Z)', text):
+        block = re.search(r'(?ms)^\[plugins\.' + pattern + r'\]\n(.*?)(?=^\[|\Z)', text).group(1)
+        if re.search(r"^\s*enabled\s*=\s*true\b", block, re.M):
+            return True
+    if re.search(r'(?m)^\s*plugins\.' + pattern + r'\.enabled\s*=\s*true\b', text):
+        return True
+    return bool(re.search(r'(?m)^\s*' + pattern + r'\s*=\s*\{[^}\n]*\benabled\s*=\s*true\b', text))
+
+
+def hook_present(tool, home=None):
+    """钩子真的会在每条消息上跑吗。
+
+    Claude：settings.json 里有我们的命令 → 会跑。
+    Codex：光有插件文件不算——Codex 要求用户在 /hooks 里信任一次；
+           还要确认插件在 config.toml 里是启用的。
+    """
+    home = Path.home() if home is None else Path(home)
     if tool == "claude":
         try:
             text = (home / ".claude" / "settings.json").read_text(encoding="utf-8")
@@ -346,8 +382,26 @@ def hook_present(tool, home=None):
             return False
         return "gate.py" in text and "starixs" in text
     if tool == "codex":
-        return (home / ".local" / "share" / "starixs" / marker / "hooks" / "hooks.json").is_file()
+        plugin = home / ".local" / "share" / "starixs" / "starixs-gate" / "hooks" / "hooks.json"
+        if not plugin.is_file():
+            return False
+        # 插件文件在，但训练过没有？信任 + 启用才算真的在跑。
+        return codex_trusted(home) > 0 and codex_enabled(home)
     return False
+
+
+def hook_state(tool, home=None):
+    """比 hook_present 更细：装了没、信任没、启用没。给 --check 说清楚下一步。"""
+    home = Path.home() if home is None else Path(home)
+    if tool == "claude":
+        return {"installed": hook_present("claude", home)}
+    if tool == "codex":
+        plugin = home / ".local" / "share" / "starixs" / "starixs-gate" / "hooks" / "hooks.json"
+        trusted = codex_trusted(home)
+        enabled = codex_enabled(home)
+        return {"installed": plugin.is_file(), "trusted": trusted > 0,
+                "enabled": enabled, "active": plugin.is_file() and trusted > 0 and enabled}
+    return {"installed": False}
 
 
 def self_test_line(tool):
@@ -358,20 +412,48 @@ def self_test_line(tool):
 
 
 def check(home=None):
-    """--check：钩子装了没有、规则读得到不、这个对话关着没有，并打印会放给 AI 的那一段。"""
+    """--check：钩子真的会在每条消息上跑吗、规则读得到不、并打印会放给 AI 的那一段。
+    每家宿主都给出下一步：装了什么、还差哪一步、谁来做。"""
     home = Path.home() if home is None else Path(home)
     lines = [f"starixs gate {VERSION}"]
     readable = sum(1 for name in (MOTHER, *IRREVERSIBLE_RULES) if rule_text(name))
     lines.append(f"  rule text readable: {readable}/3")
+    active = []
     for name in _HOST_ORDER:
         if not host_present(name, home):
             continue
-        lines.append(f"  {HOSTS[name]['label']}: present, hook "
-                     + ("installed" if hook_present(name, home) else "NOT installed"))
+        label = HOSTS[name]["label"]
+        if name == "codex":
+            state = hook_state("codex", home)
+            if state.get("active"):
+                lines.append(f"  {label}: hook active")
+                active.append(name)
+            elif not state.get("installed"):
+                lines.append(f"  {label}: present, plugin NOT installed")
+                lines.append("      next: run scripts/gate_install.py --apply")
+            elif not state.get("trusted"):
+                lines.append(f"  {label}: plugin installed, waiting for you to trust it")
+                lines.append("      next: in Codex, open /hooks and trust starixs-gate once")
+            elif not state.get("enabled"):
+                lines.append(f"  {label}: plugin installed and trusted, but not enabled")
+                lines.append("      next: enable starixs-gate in Codex plugins")
+            else:
+                lines.append(f"  {label}: hook NOT active")
+        else:
+            if hook_present(name, home):
+                lines.append(f"  {label}: hook active")
+                active.append(name)
+            else:
+                lines.append(f"  {label}: present, hook NOT installed")
+                lines.append("      next: run scripts/gate_install.py --apply")
         for rule in host_rules(name):
             lines.append(f"      extra rule: {rule}")
     text = mother_block()
     lines.append("")
+    if not active:
+        lines.append("  Nothing is placing rules yet: no hook is active.")
+        lines.append("  Until then, run `plan` at the start of each heavy task.")
+        return "\n".join(lines)
     lines.append("  what would be placed on the next task message:" if text else
                  "  NOTHING would be placed: the rule files are unreadable")
     if text:

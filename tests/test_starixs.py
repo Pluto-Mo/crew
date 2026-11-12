@@ -258,7 +258,40 @@ def main():
         check("subprocess 只用于读了也白读的地方", "subprocess." not in text, "found subprocess")
         print("  (参照实现里也没有 subprocess；本版保持一致)")
 
-        print("\n[13] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[13] gate --check 说清下一步（Codex 要信任才算真的在跑）")
+        ch = Path(tmp) / "checkhome"
+        (ch / ".codex").mkdir(parents=True, exist_ok=True)
+        (ch / ".claude").mkdir(parents=True, exist_ok=True)
+
+        def gate_check(home):
+            code = ("import sys; sys.path.insert(0, %r)\nimport gate\nprint(gate.check(%r))\n"
+                    ) % (str(ROOT / "scripts"), str(home))
+            return subprocess.run([sys.executable, "-c", code], capture_output=True,
+                                  text=True, env=dict(os.environ, STARIXS_HOME=str(home / "state")))
+
+        r = gate_check(ch)
+        check("没装时说下一步是装", "next: run scripts/gate_install.py --apply" in r.stdout, r.stdout)
+
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "gate_install.py"),
+                        "--apply", "--home", str(ch), "--host", "codex"],
+                       capture_output=True, text=True,
+                       env=dict(os.environ, STARIXS_HOME=str(ch / "state")))
+        r = gate_check(ch)
+        check("装了但没信任时说要去 /hooks", "waiting for you to trust it" in r.stdout, r.stdout)
+        check("不说 hook active", "hook active\n      extra" not in r.stdout, r.stdout)
+
+        cfg = ch / ".codex" / "config.toml"
+        cfg.write_text('[hooks.state."starixs-gate@m"]\ntrusted_hash = "x"\n\n'
+                       '[plugins."starixs-gate@m"]\nenabled = false\n')
+        r = gate_check(ch)
+        check("信任但没启用时点名启用", "not enabled" in r.stdout, r.stdout)
+
+        cfg.write_text('[hooks.state."starixs-gate@m"]\ntrusted_hash = "x"\n\n'
+                       '[plugins."starixs-gate@m"]\nenabled = true\n')
+        r = gate_check(ch)
+        check("信任并启用后才说 hook active", "Codex: hook active" in r.stdout, r.stdout)
+
+        print("\n[14] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)
