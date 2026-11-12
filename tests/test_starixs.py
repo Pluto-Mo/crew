@@ -2,6 +2,7 @@
 """自测：python3 tests/test_starixs.py。不联网，无外部依赖。"""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -257,8 +258,12 @@ def main():
         for label, pattern in bad.items():
             found = re.findall(pattern, text, re.I)
             check("没有 " + label, not found, found)
-        check("subprocess 只用于读了也白读的地方", "subprocess." not in text, "found subprocess")
-        print("  (参照实现里也没有 subprocess；本版保持一致)")
+        # gate_install 需要 subprocess：Codex 只认 `codex plugin` 登记，不认散放的文件
+        st = (ROOT / "scripts" / "starixs.py").read_text() + (ROOT / "scripts" / "gate.py").read_text()
+        check("运行期脚本没有 subprocess", "subprocess." not in st, "found subprocess")
+        gi_src = (ROOT / "scripts" / "gate_install.py").read_text()
+        runs = re.findall(r"subprocess\.run\(\[([^\]]{0,80})", gi_src)
+        check("gate_install 只跑 codex 命令", all("codex" in r for r in runs), runs)
 
         print("\n[13] gate --check 说清下一步（Codex 要信任才算真的在跑）")
         ch = Path(tmp) / "checkhome"
@@ -448,7 +453,7 @@ def main():
                            capture_output=True, text=True,
                            env=dict(os.environ, CODEX_THREAD_ID="t-2",
                                     STARIXS_HOME=str(xh / ".local/share/starixs")))
-        check("Codex 插件装了", (xh / ".local/share/starixs/starixs-gate/hooks/hooks.json").is_file(), r.stdout)
+        check("Codex 插件装了", (xh / ".local/share/starixs/codex-market/starixs-gate/hooks/hooks.json").is_file(), r.stdout)
         check("Claude settings 一个字节没动",
               json.loads((xh / ".claude/settings.json").read_text()) == {"hooks": {}}, r.stdout)
         check("也没给 Claude 建备份文件",

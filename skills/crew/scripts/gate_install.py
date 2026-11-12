@@ -21,6 +21,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -172,8 +173,12 @@ def plan(home=None, hosts=None):
             if not (home / ".codex").is_dir():
                 steps.append(("skip", str(state / MARKER), "Codex not present on this machine"))
                 continue
-            steps.append(("write", str(state / MARKER / "hooks" / "hooks.json"), "plugin hooks"))
-            steps.append(("write", str(state / MARKER / ".codex-plugin" / "plugin.json"), "plugin manifest"))
+            market = state / "codex-market"
+            steps.append(("write", str(market / MARKER / "hooks" / "hooks.json"), "plugin hooks"))
+            steps.append(("write", str(market / MARKER / ".codex-plugin" / "plugin.json"), "plugin manifest"))
+            steps.append(("write", str(market / ".agents" / "plugins" / "marketplace.json"), "marketplace"))
+            steps.append(("run", "codex plugin marketplace add " + str(market), ""))
+            steps.append(("run", "codex plugin add %s@%s" % (MARKER, MARKER), ""))
             steps.append(("note", "user action", "trust the plugin once in Codex /hooks"))
     return steps
 
@@ -243,45 +248,107 @@ def apply(home=None, hosts=None, dry=False):
                 settings.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
                 print("wrote " + str(settings))
         elif tool == "codex":
-            if not (home / ".codex").is_dir():
+            codex_home = Path(os.environ.get("CODEX_HOME") or (home / ".codex"))
+            if not codex_home.is_dir():
                 print("skip Codex: not present")
                 continue
-            market = state / MARKER
-            hooks_file = market / "hooks" / "hooks.json"
-            plugin_file = market / ".codex-plugin" / "plugin.json"
-            command = f'"{python_for_hook()}" "{gate_path}" codex'
-            hooks_payload = {
-                "description": "starixs gate: the standing request with each task message; two rules before a hard-to-undo action.",
-                "hooks": {
-                    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": command,
-                                                    "commandWindows": command, "timeout": 10}]}],
-                    "SessionStart": [{"matcher": "compact",
-                                      "hooks": [{"type": "command", "command": command,
-                                                 "commandWindows": command, "timeout": 10}]}],
-                },
-            }
-            plugin_payload = {
-                "name": MARKER,
-                "version": "local",
-                "description": "Runs the starixs gate on each user message and after compaction.",
-                "hooks": "./hooks/hooks.json",
-                "interface": {"displayName": "starixs gate",
-                              "shortDescription": "The standing request with each task message",
-                              "developerName": "starixs", "category": "Productivity"},
-            }
-            if dry:
-                print("would write " + str(hooks_file))
-                print("would write " + str(plugin_file))
-                print("  then: trust the plugin once in Codex /hooks")
-            else:
-                hooks_file.parent.mkdir(parents=True, exist_ok=True)
-                hooks_file.write_text(json.dumps(hooks_payload, ensure_ascii=False, indent=1), encoding="utf-8")
-                plugin_file.parent.mkdir(parents=True, exist_ok=True)
-                plugin_file.write_text(json.dumps(plugin_payload, ensure_ascii=False, indent=1), encoding="utf-8")
-                print("wrote " + str(hooks_file))
-                print("wrote " + str(plugin_file))
+            files = install_codex(codex_home, state, gate_path, dry=dry)
+            written.extend(files)
 
     return written
+
+
+def install_codex(codex_home: Path, state: Path, gate_path: Path, dry: bool = False):
+    """装 Codex 插件。Codex 不认散放的插件文件：它要一个**本地插件市场**——
+    市场根目录下有 .agents/plugins/marketplace.json 列出插件，插件目录在市场根里面，
+    然后由 `codex plugin marketplace add` + `codex plugin add` 登记进 config.toml。
+    只写文件不登记，Codex 永远看不见，/hooks 里也不会出现。"""
+    market = state / "codex-market"          # 市场根
+    plugin = market / MARKER                  # 插件目录，必须在市场根里面
+    hooks_file = plugin / "hooks" / "hooks.json"
+    plugin_file = plugin / ".codex-plugin" / "plugin.json"
+    market_file = market / ".agents" / "plugins" / "marketplace.json"
+    command = '"%s" "%s" codex' % (python_for_hook(), gate_path)
+
+    hooks_payload = {
+        "description": "starixs gate: the standing request with each task message; two rules before a hard-to-undo action.",
+        "hooks": {
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": command,
+                                            "commandWindows": command, "timeout": 10}]}],
+            "SessionStart": [{"matcher": "^compact$",
+                              "hooks": [{"type": "command", "command": command,
+                                         "commandWindows": command, "timeout": 10}]}],
+        },
+    }
+    plugin_payload = {
+        "name": MARKER,
+        "version": package_version(),
+        "description": "Runs the starixs gate on each user message and after compaction.",
+        "hooks": "./hooks/hooks.json",
+        "interface": {"displayName": "starixs gate",
+                      "shortDescription": "The standing request with each task message",
+                      "developerName": "starixs", "category": "Productivity"},
+    }
+    market_payload = {
+        "name": MARKER,
+        "interface": {"displayName": "starixs (local)"},
+        "plugins": [{"name": MARKER,
+                     "source": {"source": "local", "path": "./" + MARKER},
+                     "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+                     "category": "Productivity"}],
+    }
+
+    if dry:
+        for path in (hooks_file, plugin_file, market_file):
+            print("would write " + str(path))
+        print("  codex plugin marketplace add %s" % market)
+        print("  codex plugin add %s@%s" % (MARKER, MARKER))
+        return [str(hooks_file), str(plugin_file), str(market_file)]
+
+    for path, payload in ((hooks_file, hooks_payload), (plugin_file, plugin_payload),
+                          (market_file, market_payload)):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print("wrote " + str(path))
+
+    register_codex(codex_home, market)
+    return [str(hooks_file), str(plugin_file), str(market_file)]
+
+
+def register_codex(codex_home: Path, market: Path) -> bool:
+    """让 Codex 真的登记这个市场和插件。没有这一步，插件文件在硬盘上也没用：
+    Codex 只认 config.toml 里 [marketplaces.*] 和 [plugins.*] 的条目。"""
+    codex = shutil.which("codex")
+    if not codex:
+        print("codex CLI not found: plugin files are written but not registered.")
+        print("  when Codex is available, run:")
+        print("    codex plugin marketplace add %s" % market)
+        print("    codex plugin add %s@%s" % (MARKER, MARKER))
+        return False
+    env = dict(os.environ, CODEX_HOME=str(codex_home))
+    ok = True
+    for cmd in (["plugin", "marketplace", "add", str(market)],
+                ["plugin", "add", "%s@%s" % (MARKER, MARKER)]):
+        try:
+            r = subprocess.run([codex, *cmd], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=180, env=env)
+        except (OSError, subprocess.SubprocessError) as error:
+            print("FAILED: codex %s: %s" % (" ".join(cmd), error))
+            ok = False
+            continue
+        if r.returncode != 0:
+            detail = (r.stderr or r.stdout or "").strip()[:300]
+            # 重复登记不算失败：已经加过的市场/插件会报错，但状态是对的
+            if "already" in detail.lower():
+                print("codex: %s already registered" % " ".join(cmd[1:]))
+                continue
+            print("FAILED: codex %s returned %d: %s" % (" ".join(cmd), r.returncode, detail))
+            ok = False
+        else:
+            print("codex: " + " ".join(cmd))
+    if ok:
+        print("next: in Codex, open /hooks and trust the starixs gate hooks once")
+    return ok
 
 
 def own_skill_dir():

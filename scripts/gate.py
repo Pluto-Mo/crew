@@ -34,6 +34,7 @@ STATE = HOME / "gate_state.json"   # 每个对话最近一次经过门口的时�
 SWITCH = HOME / "switch.json"      # 和 starixs.py 同一个开关文件
 MOTHER = "重活四岗"
 IRREVERSIBLE_RULES = ("收不回", "不越界")
+MARKER_PLUGIN = "starixs-gate"
 
 # ---- 宿主总表：支持的每一家只在这里登记一次。是谁在调、会话编号从哪个变量取、装到哪，
 #      都从这张表取；加一家只改这里。
@@ -388,11 +389,7 @@ def hook_present(tool, home=None):
             return False
         return "gate.py" in text and "starixs" in text
     if tool == "codex":
-        plugin = home / ".local" / "share" / "starixs" / "starixs-gate" / "hooks" / "hooks.json"
-        if not plugin.is_file():
-            return False
-        # 插件文件在，但训练过没有？信任 + 启用才算真的在跑。
-        return codex_trusted(home) > 0 and codex_enabled(home)
+        return bool(hook_state("codex", home).get("active"))
     return False
 
 
@@ -402,11 +399,19 @@ def hook_state(tool, home=None):
     if tool == "claude":
         return {"installed": hook_present("claude", home)}
     if tool == "codex":
-        plugin = home / ".local" / "share" / "starixs" / "starixs-gate" / "hooks" / "hooks.json"
+        # 三件事都要成立：市场登记了、插件装进 Codex 的缓存了、钩子被信任且启用。
+        # 只看硬盘上有没有我们的文件没用——Codex 用的是它自己缓存里的副本。
+        market = (home / ".local" / "share" / "starixs" / "codex-market" / MARKER_PLUGIN
+                  / "hooks" / "hooks.json").is_file()
+        codex_home = Path(os.environ.get("CODEX_HOME") or (home / ".codex"))
+        cached = bool(list((codex_home / "plugins" / "cache").glob(
+            "*/%s/*/hooks/hooks.json" % MARKER_PLUGIN))) if (codex_home / "plugins" / "cache").is_dir() else False
         trusted = codex_trusted(home)
         enabled = codex_enabled(home)
-        return {"installed": plugin.is_file(), "trusted": trusted > 0,
-                "enabled": enabled, "active": plugin.is_file() and trusted > 0 and enabled}
+        # 市场名和插件名都叫 starixs-gate：codex 的写法是 plugin@marketplace
+        return {"installed": market, "cached": cached, "trusted": trusted > 0,
+                "enabled": enabled,
+                "active": cached and trusted > 0 and enabled}
     return {"installed": False}
 
 
@@ -483,7 +488,7 @@ def check(home=None):
     return "\n".join(lines)
 
 
-VERSION = "1.2.3"
+VERSION = "1.3.0"
 
 
 def main(argv=None, stdin=None):
