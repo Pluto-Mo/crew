@@ -445,13 +445,17 @@ def check(home=None):
                 lines.append("      next: enable starixs-gate in Codex plugins")
             else:
                 lines.append(f"  {label}: hook NOT active")
-        else:
+        elif HOSTS[name].get("hook") in ("settings", "plugin"):
+            # 只有这两家有接线实现；其余家认得出但装不上钩子
             if hook_present(name, home):
                 lines.append(f"  {label}: hook active")
                 active.append(name)
             else:
                 lines.append(f"  {label}: present, hook NOT installed")
                 lines.append("      next: run scripts/gate_install.py --apply")
+        else:
+            lines.append(f"  {label}: present, no per-message hook in this build")
+            lines.append("      the skill still works on demand: run plan at the start of a heavy task")
         for rule in host_rules(name):
             lines.append(f"      extra rule: {rule}")
     # 装的门和这个 skill 里的门是不是同一版：不是就说明该更新了
@@ -479,7 +483,7 @@ def check(home=None):
     return "\n".join(lines)
 
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 
 def main(argv=None, stdin=None):

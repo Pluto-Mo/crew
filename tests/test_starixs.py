@@ -382,7 +382,25 @@ def main():
         check("明说本地设置不被更新动", "never touched by an update" in skill_text)
         check("失败时不许手改文件假装新版", "hand-edit files to fake" in skill_text)
 
-        print("\n[18] skill 目录与仓库根同步（分发时不能漂移）")
+        print("\n[18] --check 不对没接线的宿主谎报「跑 --apply」")
+        nh = Path(tmp) / "nh"
+        # 造出各家的配置目录，host_present 才会列出来
+        for sub in (".dsh", ".pi/agent", ".config/opencode", ".kimi-code", ".codex"):
+            (nh / sub).mkdir(parents=True, exist_ok=True)
+        code = ("import sys; sys.path.insert(0, %r)\nimport gate\nprint(gate.check(%r))\n"
+                ) % (str(ROOT / "scripts"), str(nh))
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                           env=dict(os.environ, STARIXS_HOME=str(nh / "state")))
+        out = r.stdout
+        # 这些家认得出、但这份实现里没有钩子接线
+        for label in ("DeepSeek Harness", "pi", "OpenCode", "Kimi Code"):
+            if label in out:
+                # 取这个宿主那一段（到下一个宿主的行为止）
+                block = "\n".join(out.split(label, 1)[1].split("\n")[:3])
+                check("%s 不说去跑 --apply" % label, "--apply" not in block, block)
+                check("%s 说明按需可用" % label, "on demand" in block, block)
+
+        print("\n[19] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp
         r = _sp.run([sys.executable, str(ROOT / "sync.py"), "--check"],
                     capture_output=True, text=True)
