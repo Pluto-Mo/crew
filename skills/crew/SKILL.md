@@ -16,42 +16,55 @@ once is how "done" becomes a claim instead of a fact.
 | Review | Reads the result against the goal, fresh read-only context | Have done the work; be weaker than the hand |
 | Verify | Runs something that can fail | Be replaced by a model's opinion |
 
-The full rules — what counts as small, when to escalate, the reviewer table —
-are in the running text on the page and in `npx -y @starixs/crew plan`.
-Read what it prints and follow it.
+## How to run it
+
+**Prefer a local copy.** If `scripts/starixs.py` exists next to this file, run it
+directly — it is instant:
+
+```bash
+python3 <this-skill-dir>/scripts/starixs.py --tags type=engineering,steps=multi,risk=reversible,for=self
+```
+
+**Otherwise** fetch it once per session:
+
+```bash
+npx -y github:Pluto-Mo/crew plan --tags type=engineering,steps=multi,risk=reversible,for=self
+```
+
+That takes about seven seconds cold. Do it once and keep the output; do not call
+it repeatedly in the same task.
+
+`plan` prints the split rules for this task. It prints **nothing** for light
+work — that is correct, do not force it.
 
 ## First use on a machine
 
-The split works without setup. The per-message rules need one install:
+The split works with no setup. The per-message rules need one install:
 
 ```bash
-npx -y @starixs/crew check          # says whether the hook is wired
-npx -y @starixs/crew install --apply --with-gate
+npx -y github:Pluto-Mo/crew check          # says whether the hook is wired
+npx -y github:Pluto-Mo/crew install --apply --with-gate
 ```
 
-`install` without `--apply` prints what it would write and changes nothing.
-It copies a plain-text `gate.py` and the rule texts into
-`~/.local/share/starixs/` and wires the host hook (Claude Code's
-`settings.json`, backed up first, or a Codex plugin the user trusts once in
-`/hooks`). It never uploads anything.
+`install` without `--apply` prints what it would write and changes nothing. It
+copies a plain-text `gate.py` and the rule texts into `~/.local/share/starixs/`
+and wires the host hook: Claude Code's `settings.json` (backed up first), or a
+Codex plugin the user trusts once in `/hooks`. It never uploads anything.
 
-If the user declines, run `plan` yourself at the start of each heavy task
-instead — the rules still reach you, just on demand.
+If the user declines, run `plan` at the start of each heavy task instead — the
+rules still reach you, just on demand.
 
-## Commands
+## Pinning a split
+
+Only after the user agrees. A split pinned for one host is never applied to
+another.
 
 ```bash
-npx -y @starixs/crew plan --tags type=engineering,steps=multi,risk=reversible,for=self
-npx -y @starixs/crew --set "brain=X;executor=Y;review=Z;helpers=W"
-npx -y @starixs/crew --set none      # this host: no suggestion, work on current setup
-npx -y @starixs/crew --off           # stop the note; the rules still apply
-npx -y @starixs/crew --on
+<crew> --set "brain=X;executor=Y;review=Z;helpers=W"
+<crew> --set none      # this host: no suggestion, work on the current setup
+<crew> --off           # stop the note; the rules still apply
+<crew> --on
 ```
-
-`plan` prints nothing for light work. That is correct — do not force it.
-
-`--set` only after the user agrees. A split pinned for one host is never applied
-to another.
 
 ## Before you say it is done
 
