@@ -42,6 +42,7 @@ function run(python, script, args) {
 function usage() {
   console.log(`starixs — division of labour for heavy work
 
+  npx @starixs/crew setup                         skill + hook, one command
   npx @starixs/crew install [--with-gate] [--target codex|claude|agents]
   npx @starixs/crew install --apply --with-gate   write it
   npx @starixs/crew check                         is the hook wired?
@@ -83,6 +84,13 @@ function main(argv) {
       return 1;
     }
     return run(python, INSTALL, rest);
+  }
+
+  if (command === "setup") {
+    // One command: skill folder + gate. Idempotent.
+    const skill = run(python, INSTALL, ["--apply", "--with-gate", ...rest]);
+    if (skill) return skill;
+    return run(python, GATE_INSTALL, ["--check"]);
   }
 
   if (command === "check") {
