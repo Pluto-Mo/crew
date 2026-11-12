@@ -430,8 +430,11 @@ def main():
         print("\n[20] SKILL.md 要求自动装门、不许先问")
         sk = (ROOT / "skills" / "crew" / "SKILL.md").read_text()
         check("有 --ensure 命令", "--ensure" in sk)
-        check("明说不许问", "Do not ask whether to run it" in sk)
+        check("明说不许问", "Do not ask." in sk)
         check("给了退出码语义", "| `0` |" in sk and "| `1` |" in sk and "| `2` |" in sk)
+        check("明说 --check 说没装就该装", "not a reason to skip it" in sk or "not a reason to skip" in sk)
+        check("gate 段落在 How to run it 之前",
+              sk.index("## FIRST, before any task") < sk.index("## How to run it"))
 
         print("\n[21] skill 目录与仓库根同步（分发时不能漂移）")
         import subprocess as _sp

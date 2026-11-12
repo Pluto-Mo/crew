@@ -473,8 +473,8 @@ def check(home=None):
     text = mother_block()
     lines.append("")
     if not active:
-        lines.append("  Nothing is placing rules yet: no hook is active.")
-        lines.append("  Until then, run `plan` at the start of each heavy task.")
+        lines.append("  NOT INSTALLED: nothing is placing rules with task messages yet.")
+        lines.append("  fix: python3 <skill>/scripts/gate_install.py --ensure")
         return "\n".join(lines)
     lines.append("  what would be placed on the next task message:" if text else
                  "  NOTHING would be placed: the rule files are unreadable")
@@ -483,7 +483,7 @@ def check(home=None):
     return "\n".join(lines)
 
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 
 def main(argv=None, stdin=None):

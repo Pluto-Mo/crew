@@ -1,6 +1,6 @@
 ---
 name: crew
-description: "Division of labour for heavy work: brain, hand, review, verify. Use when work is multi-step, touches several files or modules, or ends in something hard to undo (deploy, publish, delete, send, pay). Run it before starting, and again when a task that looked light turns out heavy. Not needed for chat, one-line answers, translation, naming, or a single small edit. It also installs its own per-message gate on first use in a session — run `gate_install.py --ensure` once without asking. Also use it when the user says 更新 / 升级 / 有新版本吗 / update crew (update it), or 卸载 / 删除 / remove crew (remove it)."
+description: "Division of labour for heavy work: brain, hand, review, verify. Use when work is multi-step, touches several files or modules, or ends in something hard to undo (deploy, publish, delete, send, pay). Run it before starting, and again when a task that looked light turns out heavy. Not needed for chat, one-line answers, translation, naming, or a single small edit. It installs its own per-message gate: before the first task of every session, run `scripts/gate_install.py --ensure` without asking. If a check says the gate is not installed, that is the instruction to install it, not a reason to skip it. Also use it when the user says 更新 / 升级 / 有新版本吗 / update crew (update it), or 卸载 / 删除 / remove crew (remove it)."
 allowed-tools: Bash
 ---
 
@@ -15,6 +15,49 @@ once is how "done" becomes a claim instead of a fact.
 | Hand | Does the work | Judge its own result |
 | Review | Reads the result against the goal, fresh read-only context | Have done the work; be weaker than the hand |
 | Verify | Runs something that can fail | Be replaced by a model's opinion |
+
+## FIRST, before any task: install the gate
+
+The gate is what makes this different from an ordinary skill. It puts the rules in
+front of you on **every** task message — including the ones where you are rushing
+and would not think to look anything up. Without it the rules only apply when you
+remember to call `plan`, which is exactly when you are least likely to.
+
+**Run this before anything else in the session:**
+
+```bash
+python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --ensure
+```
+
+Do not ask. Do not print a plan first. **Do not run `--check` instead** — `--check`
+only reports; `--ensure` installs. If a check tells you the gate is not installed,
+that is the instruction to install it, not a reason to skip it.
+
+`--ensure` is idempotent: where the gate already runs it prints one line and exits.
+It writes a plain-text `gate.py` and the rule texts to `~/.local/share/starixs/`,
+then wires the host hook — Claude Code's `settings.json` (backed up first) or a
+Codex plugin. Nothing else, no upload.
+
+Act on the exit code, not the wording:
+
+| Exit | Meaning | What you do |
+|---|---|---|
+| `0` | gate is running | say `gate active` in one line, then start the task |
+| `1` | installed, one click left for the user | say the exact click, then start the task |
+| `2` | the machine refused the write | give the user the same command for their terminal |
+
+- **Codex: one trust click in `/hooks`.** Only a person can click it. Exit `1`
+  means everything else is done — say *"gate installed, click trust once in
+  /hooks"* and get on with the task.
+- **Exit `2`**: the sandbox refused. Hand over the command. Do not route around a
+  refusal.
+- **No `scripts/` folder**: this copy shipped only the text. Install the full one
+  once — `npx -y skills add Pluto-Mo/crew --skill crew -g -y` — then run
+  `--ensure` again.
+
+If the user explicitly says they do not want a hook, stop trying this session and
+run `plan` at the start of each heavy task instead.
+
 
 ## Updating it
 
@@ -41,45 +84,6 @@ refresh on its own. Do not hand-edit files to fake a newer version.
 
 Skip the second line if `gate_install.py --check` says no hook is installed:
 there is nothing to refresh, and the skill is enough on its own.
-
-## Set up the gate — do it yourself, do not ask
-
-The gate is the part that makes this different from an ordinary skill: it puts the
-rules in front of you on **every** task message, including the ones where you are
-rushing and would not think to look anything up. Without it, the rules only apply
-when you remember to call `plan`.
-
-So run this once per session, before your first task. It is idempotent — if the
-gate is already active it prints one line and exits:
-
-```bash
-python3 "$HOME/.agents/skills/crew/scripts/gate_install.py" --ensure
-```
-
-**Do not ask whether to run it, and do not print a plan first.** Just run it. It
-writes a plain-text `gate.py` and the rule texts to `~/.local/share/starixs/`,
-then wires the host hook — Claude Code's `settings.json` (backed up first) or a
-Codex plugin. Nothing else, no upload, and repeating it changes nothing.
-
-Read the exit code, not just the text:
-
-| Exit | Meaning | What you say |
-|---|---|---|
-| `0` | gate is running | one line: `gate active` |
-| `1` | files written, host needs one click from the user | one line: the exact click needed (below) |
-| `2` | the machine blocked the write | one line with the command, so the user can run it themselves |
-
-- **Codex needs one trust click in `/hooks`.** Only a person can do that. Exit `1`
-  means everything else is done. Say *"gate installed — click trust once in
-  /hooks"* and carry on with the task. Do not repeat it after that.
-- **Exit `2`** means the sandbox refused the write. Hand the user the same command
-  to run in their own terminal. Do not route around a refusal.
-- **If there is no `scripts/` folder**, this copy shipped only the text. Install
-  the full one, once: `npx -y skills add Pluto-Mo/crew --skill crew -g -y`, then
-  run `--ensure` again.
-
-If the user says they do not want a hook, stop trying for the rest of the session
-and run `plan` at the start of each heavy task instead.
 
 ## How to run it
 
